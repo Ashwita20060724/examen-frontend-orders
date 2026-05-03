@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { StyleSheet, View, FlatList, ImageBackground, Image, Pressable } from 'react-native'
 import { showMessage } from 'react-native-flash-message'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+// import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { getDetail, getRestaurantAnalytics, getRestaurantOrders } from '../../api/RestaurantEndpoints'
 import { nextStatus } from '../../api/OrderEndpoints'
 
@@ -17,22 +17,66 @@ import deliveredOrderImage from '../../../assets/order_status_delivered.png'
 import ImageCard from '../../components/ImageCard'
 
 export default function OrdersScreen ({ navigation, route }) {
-  const [restaurant, setRestaurant] = useState({})
+  const [restaurant, setRestaurant] = useState({ orders: [] })
+  const [analytics, setAnalytics] = useState({})
 
   useEffect(() => {
     fetchRestaurantDetail()
+    fetchRestaurantOrders()
+    fetchRestaurantAnalytics()
   }, [route])
 
   const fetchRestaurantAnalytics = async () => {
-
+    try {
+      const analytics = await getRestaurantAnalytics(route.params.id)
+      setAnalytics(analytics)
+    } catch (error) {
+      showMessage({
+        message: `Error retrieving analytics. ${error}`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
   }
 
+  // ESTA FUNCION SE LLAMA CUANDO SE ABRE LA PANTALLA,
+  // PARA OBTENER LOS PEDIDOS DE ESTE RESTAURANTE
   const fetchRestaurantOrders = async () => {
-
+    try {
+      // LLAMADA A LA API PARA OBTENER LOS PEDIDOS DE ESTE RESTAURANTE
+      const orders = await getRestaurantOrders(route.params.id)
+      // GUARDAR LOS PEDIDOS EN EL ESTADO
+      setRestaurant(prev => ({ ...prev, orders }))
+    } catch (error) {
+      // SI HAY UN ERROR, MOSTRAR UN MENSAJE DE ERROR
+      showMessage({
+        message: `Error retrieving restaurant orders. ${error}`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
   }
 
   const handleNextStatus = async (order) => {
-
+    try {
+      await nextStatus(order.id)
+      showMessage({
+        message: 'Order status updated successfully',
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+      fetchRestaurantOrders()
+    } catch (error) {
+      showMessage({
+        message: `Error updating order status. ${error}`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
   }
 
   const renderAnalytics = () => {
@@ -44,7 +88,7 @@ export default function OrdersScreen ({ navigation, route }) {
                 Invoiced today
               </TextRegular>
               <TextSemiBold textStyle={styles.text}>
-              TO DO
+                {analytics?.invoicedToday ?? 0} €
               </TextSemiBold>
             </View>
             <View style={styles.analyticsCell}>
@@ -52,7 +96,7 @@ export default function OrdersScreen ({ navigation, route }) {
                 #Pending orders
               </TextRegular>
               <TextSemiBold textStyle={styles.text}>
-              TO DO
+                {analytics?.pendingOrders ?? 0}
               </TextSemiBold>
             </View>
           </View>
@@ -63,7 +107,7 @@ export default function OrdersScreen ({ navigation, route }) {
                   #Delivered today
                 </TextRegular>
                 <TextSemiBold textStyle={styles.text}>
-                TO DO
+                {analytics?.deliveredToday ?? 0}
                 </TextSemiBold>
               </View>
               <View style={styles.analyticsCell}>
@@ -71,7 +115,7 @@ export default function OrdersScreen ({ navigation, route }) {
                   #Yesterday orders
                 </TextRegular>
                 <TextSemiBold textStyle={styles.text}>
-                TO DO
+                {analytics?.yesterdayOrders ?? 0}
                 </TextSemiBold>
               </View>
           </View>
@@ -107,7 +151,36 @@ export default function OrdersScreen ({ navigation, route }) {
   }
 
   const renderOrder = ({ item }) => {
+    return (
+      // IMAGEN SEGUN EL ESTADO DEL PEDIDO
+      // (PENDIENTE, EN PROCESO, ENVIADO, ENTREGADO)
+      <ImageCard image = {getOrderImage(item.status)}>
+        {/* DIRECCION DE ENTREGA */}
+        <TextSemiBold textStyle = {{ fontSize: 18 }}>
+          {item.address}
+        </TextSemiBold>
 
+        {/* ESTADO DEL PEDIDO */}
+        <TextRegular>
+          Status: {item.status}
+        </TextRegular>
+
+        {/* PRECIO TOTAL DEL PEDIDO */}
+        <TextRegular>
+          Total price: {item.totalPrice} €
+        </TextRegular>
+
+        {/* BOTON PARA PASAR AL SIGUIENTE ESTADO */}
+        <Pressable
+          style={[styles.actionButton, { backgroundColor: GlobalStyles.brandPrimary }]}
+          onPress={() => handleNextStatus(item)}>
+            <TextRegular textStyle={{ color: 'white', textAlign: 'center' }}>
+              Next status
+            </TextRegular>
+
+          </Pressable>
+      </ImageCard>
+    )
   }
 
   const renderEmptyOrdersList = () => {
@@ -133,7 +206,20 @@ export default function OrdersScreen ({ navigation, route }) {
   }
 
   return (
-      <></>
+      <View style={styles.container}>
+        <FlatList
+        ListHeaderComponent={
+          <>
+            {renderHeader()}
+            {renderAnalytics()}
+          </>
+        }
+        data = {restaurant.orders}
+        renderItem = {renderOrder}
+        keyExtractor={(item) => item.id.toString()}
+        ListEmptyComponent={renderEmptyOrdersList}
+      />
+    </View>
   )
 }
 
